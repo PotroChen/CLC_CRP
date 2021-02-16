@@ -8,6 +8,7 @@
 		[Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Src Blend", Float) = 1
 		[Enum(UnityEngine.Rendering.BlendMode)] _DstBlend ("Dst Blend", Float) = 0
 		[Enum(Off, 0, On, 1)] _ZWrite ("Z Write", Float) = 1
+		[KeywordEnum(On, Clip, Dither, Off)] _Shadows ("Shadows", Float) = 0
 	}
 	
 	SubShader {
@@ -24,6 +25,23 @@
 
 			#include "UnlitPass.hlsl"
 
+			ENDHLSL
+		}
+
+		Pass {
+			Tags {
+				"LightMode" = "ShadowCaster"
+			}
+
+			ColorMask 0
+
+			HLSLPROGRAM
+			#pragma target 3.5
+			#pragma shader_feature _ _SHADOWS_CLIP _SHADOWS_DITHER
+			#pragma multi_compile_instancing
+			#pragma vertex ShadowCasterPassVertex
+			#pragma fragment ShadowCasterPassFragment
+			#include "ShadowCasterPass.hlsl"
 			ENDHLSL
 		}
 	}

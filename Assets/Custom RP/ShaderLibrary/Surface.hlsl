@@ -10,6 +10,7 @@ struct Surface {
 	float alpha;
 	float metallic;
 	float smoothness;
+    float dither; //抖动(仿色)
 };
 
 #endif
