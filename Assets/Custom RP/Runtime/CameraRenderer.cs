@@ -21,7 +21,7 @@ public partial class CameraRenderer
     Lighting lighting = new Lighting();
 
     public void Render(ScriptableRenderContext context, Camera camera,
-        bool useDynamicBatching, bool useGPUInstancing,
+        bool useDynamicBatching, bool useGPUInstancing, bool useLightsPerObject,
         ShadowSettings shadowSettings)
     {
         this.context = context;
@@ -36,11 +36,11 @@ public partial class CameraRenderer
 
         buffer.BeginSample(SampleName);
         ExecuteBuffer();
-        lighting.Setup(context, cullingResults, shadowSettings);
+        lighting.Setup(context, cullingResults, shadowSettings, useLightsPerObject);
         buffer.EndSample(SampleName);
 
         Setup();
-        DrawVisibleGeometry(useDynamicBatching, useGPUInstancing);
+        DrawVisibleGeometry(useDynamicBatching, useGPUInstancing, useLightsPerObject);
         DrawUnsupportedShaders();
         DrawGizmos();
         Submit();
@@ -59,15 +59,25 @@ public partial class CameraRenderer
         ExecuteBuffer();
     }
 
-    void DrawVisibleGeometry(bool useDynamicBatching, bool useGPUInstancing)
+    void DrawVisibleGeometry(bool useDynamicBatching, bool useGPUInstancing, bool useLightsPerObject)
     {
+        PerObjectData lightsPerObjectFlags = useLightsPerObject ?
+                PerObjectData.LightData | PerObjectData.LightIndices :
+                PerObjectData.None;
         var sortingSettings = new SortingSettings(camera) { 
             criteria = SortingCriteria.CommonOpaque //渲染顺序
         };
         var drawingSettings = new DrawingSettings(unlitShaderTagId, sortingSettings) 
         {
             enableDynamicBatching = useDynamicBatching,
-            enableInstancing = useGPUInstancing
+            enableInstancing = useGPUInstancing,
+            perObjectData =
+                PerObjectData.ReflectionProbes |
+                PerObjectData.Lightmaps | PerObjectData.ShadowMask |
+                PerObjectData.LightProbe | PerObjectData.OcclusionProbe |
+                PerObjectData.LightProbeProxyVolume |
+                PerObjectData.OcclusionProbeProxyVolume |
+                lightsPerObjectFlags
         };
         drawingSettings.SetShaderPassName(1, litShaderTagId);
         //1.先渲染不透明物体

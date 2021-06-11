@@ -1,17 +1,6 @@
 ﻿#ifndef CUSTOM_SHADOW_CASTER_PASS_INCLUDED
 #define CUSTOM_SHADOW_CASTER_PASS_INCLUDED
 
-#include "../ShaderLibrary/Common.hlsl"
-
-TEXTURE2D(_BaseMap);
-SAMPLER(sampler_BaseMap);
-
-UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
-	UNITY_DEFINE_INSTANCED_PROP(float4, _BaseMap_ST)
-	UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)
-	UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)
-UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
-
 struct Attributes {
 	float3 positionOS : POSITION;
 	float2 baseUV : TEXCOORD0;
@@ -24,6 +13,8 @@ struct Varyings {
 	UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
+bool _ShadowPancaking;
+
 Varyings ShadowCasterPassVertex (Attributes input)
 {
 	Varyings output;
@@ -32,17 +23,24 @@ Varyings ShadowCasterPassVertex (Attributes input)
 	float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
 	output.positionCS = TransformWorldToHClip(positionWS);
 
-	float4 baseST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseMap_ST);
-	output.baseUV = input.baseUV * baseST.xy + baseST.zw;
+    output.baseUV = TransformBaseUV(input.baseUV);
 
-	//将clipSpace的z保持在near的前面，防止该物体投射的影子被裁剪掉
-	#if UNITY_REVERSED_Z
+	//正交视图将顶点位置Clamp到near和far没问题
+	//透视视图将顶点位置Clamp和near和far会使阴影失真
+	//开启ShadowPancaking时,是正交视图。
+	//关闭ShadowPancaking时,是透视视图。
+	//所以我们只有开启ShadowPancaking时才Clamp
+    if (_ShadowPancaking)
+    {
+		//将clipSpace的z保持在near的前面，防止该物体投射的影子被裁剪掉
+#if UNITY_REVERSED_Z
 		output.positionCS.z =
 			min(output.positionCS.z, output.positionCS.w * UNITY_NEAR_CLIP_VALUE);
-	#else
-		output.positionCS.z =
+#else
+        output.positionCS.z =
 			max(output.positionCS.z, output.positionCS.w * UNITY_NEAR_CLIP_VALUE);
-	#endif
+#endif
+    }
 
 	return output;
 }
@@ -50,12 +48,13 @@ Varyings ShadowCasterPassVertex (Attributes input)
 void  ShadowCasterPassFragment (Varyings input) 
 {
 	UNITY_SETUP_INSTANCE_ID(input);
-	float4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.baseUV);
-	float4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
-	float4 base = baseMap * baseColor;
+    ClipLOD(input.positionCS.xy, unity_LODFade.x);
+	
+    InputConfig config = GetInputConfig(input.baseUV);
+    float4 base = GetBase(config);
 
 	#if defined(_SHADOWS_CLIP)
-		clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
+		clip(base.a - GetCutoff(config));
 	#elif defined(_SHADOWS_DITHER)
 		float dither = InterleavedGradientNoise(input.positionCS.xy, 0);
 		clip(base.a - dither);
